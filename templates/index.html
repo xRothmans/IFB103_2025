@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Sensor Data Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> <!-- Dynamic Flask link -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- init Chart.js -->
+</head>
+
+<body>
+    <div class="header">
+        <h1>Sensor Data Dashboard</h1>
+        <hr style="border: none; border-top: 1px solid #313131; margin: 0 0 20px 0;">
+    </div>
+    <label for="start">Start Date:</label>
+    <input type="datetime-local" id="start" name="start">
+    <label for="end">End Date:</label>
+    <input type="datetime-local" id="end" name="end">
+    <button class="pill-btn pill-btn-small" onclick="loadChart(), runAnalysis()">Apply</button>
+    <div class="flex-container">
+        <div id="chart-container">
+            <canvas id="dataChart" width="600" height="300"></canvas>
+        </div>
+        <div id="analysis">
+            <div class="analysis-header">
+                <h1>AI Analysis:</h1>
+                <div id="analysis-loader" class="loader"></div>
+            </div>
+            <div id="analysis-content">
+                <div id="typedText" class="text"></div>
+            </div>
+            <button class="pill-btn" id="send-report-btn">Send Report</button>
+        </div>
+    </div>
+
+    <script>
+        let buffer = 0;
+
+        // Format the date to YYYY-MM-DDTHH:MM
+        function formatDateTimeLocal(date) {
+            const pad = n => n.toString().padStart(2, '0'); // Pad digits to two characters
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        // Pre-fill with last 24 hours && load chart and analysis on page load
+        window.onload = function () {
+            const now = new Date();
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            document.getElementById('end').value = formatDateTimeLocal(now);
+            document.getElementById('start').value = formatDateTimeLocal(yesterday);
+            loadChart();
+            runAnalysis();
+        };
+
+        let chart;
+
+        // Function to load the chart with data
+        function loadChart() {
+            const start = document.getElementById('start').value;
+            const end = document.getElementById('end').value;
+
+            // GET req -- parse as JSON
+            fetch(`/get-data?start_date=${start}&end_date=${end}`)
+                .then(res => res.json())
+                .then (data => {
+                    const canvas = document.getElementById('dataChart');
+                    const ctx = canvas.getContext('2d');
+                    if (chart) chart.destroy(); // clear previous chart if it exists
+
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.timestamps,
+                            datasets: [
+                                {
+                                    label: 'Temperature (°C)',
+                                    data: data.temperature,
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Humidity (%)',
+                                    data: data.humidity,
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    title: { display: true, text: 'Timestamp' },
+                                    ticks: { autoSkip: true, maxTicksLimit: 20 }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    title: { display: true, text: 'Value' }
+                                }
+                            }
+                        }
+                    });
+                });
+        }
+
+        function runAnalysis() {
+            if (buffer === 0) { // Only run if not already running
+                document.getElementById('analysis-loader').style.display = 'grid';
+                document.getElementById('typedText').innerHTML = '';
+                buffer = 1; // buffer = true
+                fetch(`/analyse-data?start_date=${document.getElementById('start').value}&end_date=${document.getElementById('end').value}`)
+                    .then(res => res.text())
+                    .then(html => {
+                        document.getElementById('analysis-loader').style.display = 'none'; // hide loading animation
+                        typeWriterHTML('typedText', html, 2); // init typewriter effect
+                    })
+            }
+        }
+
+
+        function typeWriterHTML(elementId, html, speed) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = '';
+            let i = 0;
+            let isTag = false;
+            let text = '';
+
+            function type() {
+
+                if (i < html.length) {
+                    let char = html[i];
+                    text += char;
+                    if (char === '<') isTag = true;
+                    if (char === '>') isTag = false;
+
+                    i++;
+                    // Only update innerHTML when not inside a tag
+                    if (!isTag) {
+                        element.innerHTML = text;
+                    }
+                    setTimeout(type, isTag ? 0 : speed);
+                } else {
+                    // Ensure final HTML is rendered
+                    element.innerHTML = text;
+                }
+                buffer = 0; // kill buffer
+            }
+            type();
+
+        }
+
+        document.addEventListener('DOMContentLoaded', function () { // wait for load
+
+            // Send report button
+            const btn = document.getElementById('send-report-btn');
+            if (btn) {
+                btn.addEventListener('click', function (e) {
+                    // Remove any existing bubble
+                    const oldBubble = btn.querySelector('.bubble');
+                    if (oldBubble) oldBubble.remove();
+
+                    // Create bubble
+                    const bubble = document.createElement('span');
+                    bubble.className = 'bubble';
+                    btn.appendChild(bubble);
+
+                    // Remove bubble after animation
+                    bubble.addEventListener('animationend', () => bubble.remove());
+                    btn.blur();
+                });
+            }
+
+            const modal = document.getElementById('reportModal');
+            const openBtn = document.getElementById('send-report-btn');
+            const closeBtn = document.getElementById('closeModalBtn');
+            const form = document.getElementById('reportForm');
+            const statusDiv = document.getElementById('reportStatus');
+
+
+            if (openBtn) {
+                openBtn.addEventListener('click', function (e) {
+                    // Get the current analysis HTML
+                    const analysisHTML = document.getElementById('typedText').innerHTML;
+                    document.getElementById('analysisContent').value = analysisHTML;
+                    modal.showModal();
+                });
+            }
+            if (closeBtn) {
+                closeBtn.onclick = function () {
+                    statusDiv.textContent = '';
+                    form.reset();
+                    modal.close();
+                };
+            }
+            window.onclick = function (event) {
+                if (event.target === modal) {
+                    modal.close();
+                    statusDiv.textContent = '';
+                    form.reset();
+                }
+            };
+
+            // Send email report
+            if (form) {
+                form.onsubmit = function (e) {
+                    e.preventDefault();
+                    statusDiv.textContent = 'Sending...';
+                    fetch('http://localhost:3000/send-report', { // Fetch from email server
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: form.email.value,
+                            analysis: form.analysisContent.value
+                        })
+                    })
+                    // Check response
+                    .then(res => {
+                        if (!res.ok) return res.text().then(text => Promise.reject(text || 'Failed to send'));
+                        return res.text();
+                    })
+                    .then(msg => statusDiv.textContent = msg || 'Report sent!')
+                    .catch(err => {
+                        console.error('Request failed:', err);
+                        statusDiv.textContent = `Error: ${err}`;
+                    });
+
+                };
+            }
+        });
+    </script>
+    <dialog id="reportModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeModalBtn">&times;</span>
+            <h2>Send Temperature Report</h2>
+            <form id="reportForm">
+                <label for="email">Recipient Email:</label>
+                <input type="email" id="email" name="email" required>
+                <textarea id="analysisContent" name="analysisContent" style="display:none;"></textarea>
+                <button type="submit" class="pill-btn pill-btn-small">Send</button>
+            </form>
+            <div id="reportStatus"></div>
+        </div>
+    </dialog>
+
+</body>
+
+</html>
