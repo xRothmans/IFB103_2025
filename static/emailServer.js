@@ -12,15 +12,15 @@ app.post('/send-report', async (req, res) => {
 
     // Email host
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        service: 'gmail', // Replace with your email service
         auth: {
-            user: 'rosscoubs@gmail.com',
-            pass: 'zakr uziu mdmw qgdi'
+            user: 'email', // Replace with your email
+            pass: 'pass' // Replace with your email password or app password
         }
     });
 
     const mailOptions = {
-        from: 'rosscoubs@gmail.com',
+        from: 'email',
         to: email,
         subject: 'Your Report',
         html: analysis || 'No analysis provided.',

@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 # API Key
-client = openai.Client(api_key="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")
+#client = openai.Client(api_key="your API key here")
 
 analyse_bp = Blueprint('analyse', __name__)
 
